@@ -32,7 +32,8 @@ router.post('/', async (req, res) => {
 
         const user = await findOrCreateUser(deviceId);
         const subscription = await stripe.subscriptions.retrieve(session.subscription);
-        const plan = subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
+        const item = subscription.items.data[0];
+        const plan = item?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
 
         await upsertSubscription({
           userId: user.id,
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
           stripeSubscriptionId: session.subscription,
           plan,
           status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000)
+          currentPeriodEnd: new Date(item.current_period_end * 1000)
         });
         break;
       }
@@ -51,14 +52,15 @@ router.post('/', async (req, res) => {
         const existing = await getSubscriptionByStripeCustomerId(subscription.customer);
         if (!existing) break;
 
-        const plan = subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
+        const item = subscription.items.data[0];
+        const plan = item?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
         await upsertSubscription({
           userId: existing.user_id,
           stripeCustomerId: subscription.customer,
           stripeSubscriptionId: subscription.id,
           plan,
           status: event.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000)
+          currentPeriodEnd: new Date(item.current_period_end * 1000)
         });
         break;
       }
