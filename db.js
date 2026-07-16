@@ -13,8 +13,14 @@ async function initSchema() {
       id SERIAL PRIMARY KEY,
       device_id TEXT UNIQUE NOT NULL,
       email TEXT,
+      ai_messages_used INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+  // Safe to run repeatedly — adds the column if this table already existed
+  // from before AI usage tracking was introduced.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_used INTEGER NOT NULL DEFAULT 0;
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS subscriptions (
@@ -84,11 +90,42 @@ async function getSubscriptionByStripeCustomerId(stripeCustomerId) {
   return result.rows[0] || null;
 }
 
+function isSubscriptionActive(subscription) {
+  if (!subscription) return false;
+  const activeStatuses = ['active', 'trialing'];
+  const notExpired = subscription.current_period_end
+    ? new Date(subscription.current_period_end) > new Date()
+    : false;
+  return activeStatuses.includes(subscription.status) && notExpired;
+}
+
+async function isDevicePremium(deviceId) {
+  const subscription = await getSubscriptionByDeviceId(deviceId);
+  return isSubscriptionActive(subscription);
+}
+
+async function getAiUsage(deviceId) {
+  const result = await pool.query('SELECT ai_messages_used FROM users WHERE device_id = $1', [deviceId]);
+  return result.rows[0]?.ai_messages_used || 0;
+}
+
+async function incrementAiUsage(deviceId) {
+  const result = await pool.query(
+    'UPDATE users SET ai_messages_used = ai_messages_used + 1 WHERE device_id = $1 RETURNING ai_messages_used',
+    [deviceId]
+  );
+  return result.rows[0]?.ai_messages_used || 0;
+}
+
 module.exports = {
   pool,
   initSchema,
   findOrCreateUser,
   upsertSubscription,
   getSubscriptionByDeviceId,
-  getSubscriptionByStripeCustomerId
+  getSubscriptionByStripeCustomerId,
+  isSubscriptionActive,
+  isDevicePremium,
+  getAiUsage,
+  incrementAiUsage
 };
