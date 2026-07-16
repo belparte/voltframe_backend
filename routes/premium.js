@@ -1,5 +1,5 @@
 const express = require('express');
-const { getSubscriptionByDeviceId } = require('../db');
+const { getSubscriptionByDeviceId, isSubscriptionActive } = require('../db');
 
 const router = express.Router();
 
@@ -15,14 +15,8 @@ router.get('/', async (req, res) => {
       return res.json({ premium: false });
     }
 
-    const activeStatuses = ['active', 'trialing'];
-    const isActive = activeStatuses.includes(subscription.status);
-    const notExpired = subscription.current_period_end
-      ? new Date(subscription.current_period_end) > new Date()
-      : false;
-
     res.json({
-      premium: isActive && notExpired,
+      premium: isSubscriptionActive(subscription),
       plan: subscription.plan,
       status: subscription.status,
       expires: subscription.current_period_end
