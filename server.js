@@ -25,6 +25,28 @@ app.get('/', (req, res) => {
   res.json({ status: 'VoltFrame backend running' });
 });
 
+// Stripe's success_url/cancel_url must be real https URLs — it rejects
+// custom app schemes (voltframe://) outright. These two routes are the
+// "fallback page" Stripe's own docs describe: a real HTTPS page that
+// immediately redirects into the app's custom scheme, which Android's
+// intent filter then intercepts.
+function deepLinkRedirectPage(target) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<script>window.location.href = '${target}';</script>
+</head><body style="font-family:sans-serif;text-align:center;padding-top:60px;color:#666">
+<p>Returning to VoltFrame…</p>
+<p><a href="${target}">Tap here if you're not redirected automatically.</a></p>
+</body></html>`;
+}
+
+app.get('/checkout-success', (req, res) => {
+  res.send(deepLinkRedirectPage('voltframe://premium-success'));
+});
+
+app.get('/checkout-cancel', (req, res) => {
+  res.send(deepLinkRedirectPage('voltframe://premium-cancel'));
+});
+
 const PORT = process.env.PORT || 3000;
 
 initSchema()
