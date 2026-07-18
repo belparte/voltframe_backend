@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { initSchema } = require('./db');
 const checkoutRouter = require('./routes/checkout');
 const webhookRouter = require('./routes/webhook');
@@ -17,9 +18,22 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), webhoo
 
 app.use(express.json());
 
+// Device IDs are client-generated and unauthenticated — the free-tier
+// message cap in routes/ai.js counts per device ID, but nothing stops
+// someone from generating unlimited device IDs to get unlimited free AI
+// calls, each of which costs real Anthropic API spend. This caps requests
+// per IP as a backstop the client can't route around.
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests — please try again later.' }
+});
+
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/premium-status', premiumRouter);
-app.use('/api/ai', aiRouter);
+app.use('/api/ai', aiLimiter, aiRouter);
 
 app.get('/', (req, res) => {
   res.json({ status: 'VoltFrame backend running' });
